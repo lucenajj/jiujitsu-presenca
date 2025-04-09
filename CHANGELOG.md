@@ -5,6 +5,19 @@ Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/spec/v2.0.0.html).
 
+## [1.2.2] - 2025-04-09
+
+### Adicionado
+- Implementado sistema de autenticação para academias com acesso individual
+- Integração da função create_user_auth do Supabase no cadastro de academias
+- Criação automática de usuários para academias durante o cadastro
+- Adicionado fallback para usar a API nativa do Supabase quando a função RPC não estiver disponível
+
+### Corrigido
+- Resolvido problema onde academias não conseguiam acessar o sistema após cadastro
+- Melhorada a validação de usuário e senha no formulário de cadastro de academias
+- Aprimorado o tratamento de erros durante o processo de criação de usuários
+
 ## [1.2.1] - 2025-04-01
 
 ### Adicionado

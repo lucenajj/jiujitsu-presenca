@@ -168,17 +168,82 @@ const AcademyForm: React.FC<AcademyFormProps> = ({
           .select();
       } else {
         // Criação de nova academia
-        console.log('Tentando inserir academia diretamente:', {
-          ...academyData,
-          user_id: user.id,
-          created_by: user.id
-        });
         
+        // Verificar se os campos de usuário e senha estão preenchidos
+        if (!data.username || !data.password) {
+          throw new Error('Usuário e senha são obrigatórios para criar uma academia');
+        }
+        
+        console.log('Criando usuário de autenticação para a academia');
+        
+        // Dados do usuário
+        const userData = {
+          role: 'academy',  // Definindo role do usuário como 'academy'
+          full_name: data.ownerName,
+          academy_name: data.academyName,
+          username: data.username
+        };
+        
+        let authUserData;
+        let authError;
+        
+        try {
+          // Tentar primeiro com a função RPC personalizada
+          const rpcResult = await supabase
+            .rpc('create_user_auth', {
+              email: data.email,
+              password: data.password,
+              user_data: userData
+            });
+            
+          authUserData = rpcResult.data;
+          authError = rpcResult.error;
+          
+          // Se a função RPC falhar, usar a API de autenticação padrão do Supabase
+          if (authError && authError.message?.includes('does not exist')) {
+            console.log('Função RPC não encontrada, usando API de autenticação do Supabase');
+            
+            // Criar usuário usando a API de autenticação do Supabase
+            const authResult = await supabase.auth.signUp({
+              email: data.email,
+              password: data.password,
+              options: {
+                data: userData
+              }
+            });
+            
+            if (authResult.error) {
+              throw authResult.error;
+            }
+            
+            // Usar o ID do usuário criado
+            authUserData = authResult.data.user?.id;
+            authError = null;
+          }
+        } catch (error) {
+          console.error('Erro ao criar usuário:', error);
+          throw new Error(`Erro ao criar usuário: ${error instanceof Error ? error.message : String(error)}`);
+        }
+        
+        if (authError) {
+          console.error('Erro ao criar usuário de autenticação:', authError);
+          // Mostrar o erro completo para diagnóstico
+          throw new Error(`Erro ao criar usuário: ${JSON.stringify(authError)}`);
+        }
+        
+        if (!authUserData) {
+          throw new Error('Não foi possível criar o usuário de autenticação');
+        }
+        
+        console.log('Usuário de autenticação criado com sucesso:', authUserData);
+        
+        // Inserir academia com o ID do usuário criado
+        console.log('Tentando inserir academia com user_id:', authUserData);
         response = await supabase
           .from('academies')
           .insert({
             ...academyData,
-            user_id: user.id,
+            user_id: authUserData, // ID retornado pela função create_user_auth
             created_by: user.id
           })
           .select();
@@ -240,6 +305,9 @@ const AcademyForm: React.FC<AcademyFormProps> = ({
         } else if (error.message.includes('does not exist')) {
           title = "Erro no banco de dados";
           message = "A tabela de academias não existe. Contate o administrador.";
+        } else {
+          // Mensagem personalizada para outros erros
+          message = error.message;
         }
       }
       
