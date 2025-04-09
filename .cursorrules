@@ -1,0 +1,134 @@
+{
+    "general": {
+        "response_language": "Português (Brasil)",
+        "code_language": "English",
+        "comment_language": "English"
+    },
+    "development_flow": {
+        "steps": [
+            {
+                "phase": "PRIMEIRO",
+                "description": "Se for modificar arquivos, confira antes quais arquivos serão modificados, e para cada um, liste quais trechos, estilos e funcionalidades devem permanecer imutáveis para manter a integridade do código."
+            },
+            {
+                "phase": "SEGUNDO",
+                "description": "Após o estudo, passe para a fase de análise dos passos. Se a ação for grande, divida em passos menores para manter a integridade do código, garantindo que cada etapa receba a atenção necessária. Analise e exponha seu plano."
+            },
+            {
+                "phase": "TERCEIRO",
+                "steps": [
+                    "Decida o melhor primeiro passo, e faça. ",
+                    "Decida o melhor segundo passo, analise o que deve permanecer imutável e faça. ",
+                    "Continue, obrigatoriamente analisando o que deve permanecer imutável e fazendo um passo por vez."
+                ]
+            }
+        ]
+    },
+    "development_rules": [
+        "Sempre use Tailwind CSS para estilo",
+        "Sempre aplique o princípio DRY e siga o estilo, cores e fontes definidos no projeto",
+        "Sempre use React Context para autenticação e Supabase para operações no servidor",
+        "Sempre mantenha a compatibilidade com React Router utilizando react-router-dom",
+        "Sempre defina as cores do tema como variáveis CSS e use-as via classes tailwind",
+        "Nunca use códigos de cor diretamente nos componentes, sempre use as variáveis do tema",
+        "Mantenha a consistência do sistema de cores com a paleta definida",
+        "Sempre use a estratégia de componentes encapsulados para UI reutilizável",
+        "Mantenha as validações de formulários com ZOD",
+        "Sempre siga os padrões de componentes Shadcn UI",
+        "Garanta que todos os componentes são responsivos para desktop e mobile"
+    ],
+    "project_guidelines": {
+        "project_type": "Aplicação web React com TypeScript e Supabase",
+        "file_naming": "Arquivos de componentes usam PascalCase.tsx, utilitários usam kebab-case.ts",
+        "terminal_commands": "Use a sintaxe correta do PowerShell do Windows para comandos do terminal",
+        "one_action_at_a_time": "Execute apenas uma ação por vez e peça permissão antes de cada passo",
+        "immutable_analysis": "Sempre analise o que deve permanecer imutável para preservar a integridade do código",
+        "theme_management": {
+            "colors": {
+                "naming": "Use nomes semânticos (jiujitsu-500, etc.) para as cores do tema",
+                "definition": "Defina todas as cores no tema do Tailwind",
+                "usage": "Use apenas via classes tailwind que referenciam as variáveis",
+                "palettes": {
+                    "jiujitsu": "Paleta principal da aplicação",
+                    "gray": "Para elementos neutros"
+                }
+            },
+            "typography": {
+                "scale": "Utilize as classes de texto do Tailwind/Shadcn para consistência",
+                "weights": "Siga os padrões de peso de fonte do design system",
+                "lineHeight": "Utilize as configurações padrão de espaçamento do Tailwind"
+            }
+        }
+    },
+    "component_guidelines": {
+        "type_declaration": "Declare todos os tipos explicitamente no próprio arquivo",
+        "use_existing_components": "Priorize componentes Shadcn UI e crie componentes personalizados somente quando necessário",
+        "logic_hooks": "Implemente hooks específicos na pasta hooks/",
+        "forms": "Use react-hook-form com resolvers Zod para validação",
+        "styling": {
+            "colors": "Use apenas classes tailwind que referenciam variáveis do tema",
+            "responsiveness": "Use classes responsivas (md:, lg:) para adaptar a diferentes tamanhos de tela"
+        }
+    },
+    "stack": {
+        "framework": "React 18",
+        "language": "TypeScript",
+        "styles": "Tailwind CSS + Shadcn UI",
+        "authentication": "Supabase Auth",
+        "database": "PostgreSQL via Supabase",
+        "router": "React Router v6",
+        "form_handling": "React Hook Form + Zod"
+    },
+    "directory_structure": {
+        "src": {
+            "components": {
+                "ui": "Componentes de UI básicos (Shadcn)",
+                "layout": {
+                    "Header.tsx": "Cabeçalho da aplicação",
+                    "MainLayout.tsx": "Layout principal com sidebar",
+                    "Sidebar.tsx": "Menu lateral de navegação"
+                },
+                "AcademyForm.tsx": "Formulário de cadastro/edição de academias",
+                "AcademyList.tsx": "Listagem de academias",
+                "StudentForm.tsx": "Formulário de alunos",
+                "StudentDetails.tsx": "Detalhes do aluno",
+                "ClassForm.tsx": "Formulário de aulas"
+            },
+            "hooks": {
+                "useAuth.tsx": "Hook de autenticação",
+                "use-toast.ts": "Hook para notificações toast",
+                "use-mobile.tsx": "Hook para detecção de dispositivos móveis"
+            },
+            "integrations": {
+                "supabase": {
+                    "client.ts": "Cliente Supabase",
+                    "types.ts": "Tipos do Supabase"
+                }
+            },
+            "lib": {
+                "supabase.ts": "Configuração do Supabase",
+                "utils.ts": "Funções utilitárias",
+                "mockData.ts": "Dados mock para desenvolvimento"
+            },
+            "pages": {
+                "Dashboard.tsx": "Página inicial após login",
+                "Settings.tsx": "Configurações do sistema",
+                "StudentsList.tsx": "Listagem de alunos",
+                "ClassesList.tsx": "Listagem de aulas",
+                "AttendanceRecord.tsx": "Registro de presença",
+                "AttendanceList.tsx": "Listagem de presenças",
+                "Reports.tsx": "Relatórios",
+                "Login.tsx": "Página de login",
+                "Index.tsx": "Página inicial",
+                "NotFound.tsx": "Página 404"
+            },
+            "App.tsx": "Componente principal da aplicação",
+            "main.tsx": "Ponto de entrada da aplicação",
+            "index.css": "Estilos globais"
+        },
+        "supabase": {
+            "migrations": "Scripts de migração da base de dados",
+            "config.toml": "Configuração do Supabase"
+        }
+    }
+}
