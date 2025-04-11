@@ -41,31 +41,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       role: 'user', // Valor padrão que será substituído
     };
     
-    // Buscar o papel do usuário na tabela user_academies
-    try {
-      const { data, error } = await supabase
-        .from('user_academies')
-        .select('role')
-        .eq('user_id', session.user.id)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single();
-      
-      if (!error && data) {
-        userObj.role = data.role;
-        console.log('Role identificada na tabela user_academies:', data.role);
-      } else {
-        // Fallback: tentar obter a role dos metadados do usuário
-        if (session.user.user_metadata && session.user.user_metadata.role) {
-          userObj.role = session.user.user_metadata.role;
-        } else if (session.user.app_metadata && session.user.app_metadata.role) {
-          userObj.role = session.user.app_metadata.role;
-        }
-        console.log('Role identificada:', userObj.role);
-      }
-    } catch (error) {
-      console.error('Erro na verificação:', error);
+    // Obter a role dos metadados do usuário - usar isso como fonte principal
+    // ao invés de tentar acessar a tabela user_academies que está causando recursão
+    if (session.user.user_metadata && session.user.user_metadata.role) {
+      userObj.role = session.user.user_metadata.role;
+    } else if (session.user.app_metadata && session.user.app_metadata.role) {
+      userObj.role = session.user.app_metadata.role;
     }
+    
+    console.log('Role identificada:', userObj.role);
     
     // Se não for admin, buscar a academia associada
     if (userObj.role !== 'admin') {
@@ -90,25 +74,59 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   // Verificar se o usuário já está autenticado através da sessão do Supabase
   useEffect(() => {
+    let isMounted = true;
+    let timeoutId: NodeJS.Timeout;
+    
     const checkSession = async () => {
       setIsLoading(true);
       
+      // Definir um timeout máximo para o carregamento (10 segundos)
+      timeoutId = setTimeout(() => {
+        if (isMounted) {
+          console.log('Timeout de verificação de sessão atingido');
+          setIsLoading(false);
+        }
+      }, 10000);
+      
       try {
+        console.log('Verificando sessão atual do Supabase...');
+        
         // Obter a sessão atual
         const { data: { session }, error } = await supabase.auth.getSession();
         
         if (error) {
-          throw error;
+          console.error('Erro ao verificar sessão:', error);
+          return; // Importante: sair da função em caso de erro
         }
         
         if (session) {
-          const userObject = await createUserObject(session);
-          setUser(userObject);
+          console.log('Sessão encontrada, criando objeto de usuário');
+          try {
+            const userObject = await createUserObject(session);
+            if (isMounted) {
+              setUser(userObject);
+              console.log('Objeto de usuário definido:', userObject);
+            }
+          } catch (error) {
+            console.error('Erro ao criar objeto de usuário:', error);
+          }
+        } else {
+          console.log('Nenhuma sessão encontrada');
+          if (isMounted) {
+            setUser(null);
+          }
         }
       } catch (error) {
         console.error('Erro ao verificar sessão:', error);
+        if (isMounted) {
+          setUser(null);
+        }
       } finally {
-        setIsLoading(false);
+        clearTimeout(timeoutId);
+        if (isMounted) {
+          setIsLoading(false);
+          console.log('Verificação de sessão concluída');
+        }
       }
     };
     
@@ -117,21 +135,38 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     // Configurar o listener de mudanças de autenticação
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        if (session) {
-          // Usuário logado
-          const userObject = await createUserObject(session);
-          setUser(userObject);
-        } else {
-          // Usuário deslogado
-          setUser(null);
-        }
+        console.log('Evento de autenticação:', event);
         
-        setIsLoading(false);
+        try {
+          if (session && event !== 'SIGNED_OUT') {
+            // Usuário logado
+            console.log('Usuário autenticado, criando objeto de usuário');
+            const userObject = await createUserObject(session);
+            if (isMounted) {
+              setUser(userObject);
+            }
+          } else {
+            // Usuário deslogado
+            console.log('Usuário deslogado ou evento de logout');
+            if (isMounted) {
+              setUser(null);
+            }
+          }
+        } catch (error) {
+          console.error('Erro no listener de autenticação:', error);
+        } finally {
+          if (isMounted) {
+            setIsLoading(false);
+          }
+        }
       }
     );
     
     // Limpar a subscrição quando o componente for desmontado
     return () => {
+      console.log('Cancelando subscrição de autenticação');
+      isMounted = false;
+      clearTimeout(timeoutId);
       subscription.unsubscribe();
     };
   }, []);
@@ -186,15 +221,32 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
+  // Função para logout completo
   const logout = async () => {
     try {
-      await supabase.auth.signOut();
+      console.log('Iniciando processo de logout');
+      
+      // 1. Limpar o estado do usuário antes de qualquer outra operação
       setUser(null);
-      navigate('/');
+      
+      // 2. Executar o logout no Supabase
+      await supabase.auth.signOut();
+      
+      // 3. Limpar completamente o localStorage (abordagem radical)
+      localStorage.clear();
+      
+      // 4. Mostrar feedback ao usuário
       toast({
         title: 'Logout realizado',
         description: 'Você saiu do sistema com sucesso.',
       });
+      
+      // 5. Forçar uma recarga completa da página para limpar qualquer estado residual
+      // Isso é melhor que usar navigate() pois limpa completamente o estado da aplicação
+      setTimeout(() => {
+        window.location.href = '/';
+      }, 500);
+      
     } catch (error) {
       console.error('Erro ao fazer logout:', error);
       toast({
@@ -202,6 +254,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         title: 'Erro ao fazer logout',
         description: 'Ocorreu um erro ao sair do sistema.',
       });
+      
+      // Mesmo com erro, tentar recarregar a página para tentar limpar o estado
+      setTimeout(() => {
+        window.location.href = '/';
+      }, 500);
     }
   };
 

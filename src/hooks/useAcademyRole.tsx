@@ -17,62 +17,87 @@ interface UseAcademyRoleReturn {
  * Inspirado no padrão multi-tenant para garantir isolamento de dados
  */
 export const useAcademyRole = (): UseAcademyRoleReturn => {
-  const { user } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
   const [academyId, setAcademyId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
-  // Valores derivados do objeto user
+  // Valores derivados do objeto user - cálculo simples e direto
   const userId = user?.id || null;
   const userRole = user?.role || null;
   const isAdmin = userRole === 'admin';
-  
-  // Se o usuário já tiver academia_id nos metadados, usamos esse valor
   const isAcademyOwner = !!academyId && userRole === 'academy_owner';
   
+  // Efeito simplificado para carregar academy_id
   useEffect(() => {
+    // Versão simplificada e segura da função getAcademyId
     const getAcademyId = async () => {
       try {
+        // Limpar o timeout após 5 segundos para evitar carregamento infinito
+        const timeoutId = setTimeout(() => {
+          console.log('Timeout de verificação de academia atingido');
+          setLoading(false);
+        }, 5000);
+        
+        // Definir loading
         setLoading(true);
         
-        // Se não houver usuário ou se for admin, não precisamos buscar academia
-        if (!userId || isAdmin) {
-          setAcademyId(user?.academy_id || null);
+        // Verificar condições simples e rápidas primeiro
+        if (!user || authLoading) {
+          console.log('Hook useAcademyRole: usuário não está pronto ou autenticação ainda carregando');
+          setAcademyId(null);
           setLoading(false);
+          clearTimeout(timeoutId);
           return;
         }
         
-        // Se o usuário já tiver academia_id no objeto, usamos esse valor
-        if (user?.academy_id) {
+        if (isAdmin) {
+          console.log('Hook useAcademyRole: usuário é admin, não precisa de academyId');
+          setAcademyId(null);
+          setLoading(false);
+          clearTimeout(timeoutId);
+          return;
+        }
+        
+        if (user.academy_id) {
+          console.log('Hook useAcademyRole: academy_id encontrado no objeto user', user.academy_id);
           setAcademyId(user.academy_id);
           setLoading(false);
+          clearTimeout(timeoutId);
           return;
         }
         
-        // Caso contrário, consultamos o banco de dados
+        // Somente executar a busca no banco se realmente necessário
+        console.log('Hook useAcademyRole: consultando academia para o user_id', userId);
+        
         const { data, error } = await supabase
           .from('academies')
           .select('id')
           .eq('user_id', userId)
-          .maybeSingle();  // Usamos maybeSingle para permitir que não exista academia vinculada
-        
+          .maybeSingle();
+          
         if (error) {
-          console.error('Erro ao buscar academia vinculada:', error);
-          setError('Falha ao verificar vinculação de academia');
+          console.error('Hook useAcademyRole: erro ao buscar academia:', error);
+          setError('Erro ao buscar academia vinculada');
           setAcademyId(null);
         } else {
+          console.log('Hook useAcademyRole: resultado da busca de academia:', data);
           setAcademyId(data?.id || null);
         }
+        
+        // Garantir que o loading seja finalizado
+        setLoading(false);
+        clearTimeout(timeoutId);
       } catch (err) {
-        console.error('Erro ao obter academia vinculada:', err);
-        setError('Falha ao verificar vinculação de academia');
-      } finally {
+        console.error('Hook useAcademyRole: exceção ao buscar academia:', err);
+        setError('Erro ao buscar academia vinculada');
+        setAcademyId(null);
         setLoading(false);
       }
     };
     
     getAcademyId();
-  }, [userId, isAdmin, user?.academy_id]);
+  }, [user, userId, isAdmin, authLoading]);
   
   return {
     userId,
@@ -80,7 +105,7 @@ export const useAcademyRole = (): UseAcademyRoleReturn => {
     academyId,
     isAdmin,
     isAcademyOwner,
-    loading,
+    loading: loading || authLoading,
     error
   };
 }; 
