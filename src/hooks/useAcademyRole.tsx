@@ -51,6 +51,7 @@ export const useAcademyRole = (): UseAcademyRoleReturn => {
           return;
         }
         
+        // Se o papel do usuário for admin, não precisamos de um academyId
         if (isAdmin) {
           console.log('Hook useAcademyRole: usuário é admin, não precisa de academyId');
           setAcademyId(null);
@@ -59,6 +60,7 @@ export const useAcademyRole = (): UseAcademyRoleReturn => {
           return;
         }
         
+        // Se o objeto de usuário já tiver um academy_id, usamos ele
         if (user.academy_id) {
           console.log('Hook useAcademyRole: academy_id encontrado no objeto user', user.academy_id);
           setAcademyId(user.academy_id);

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
 import { 
   Home, 
@@ -13,17 +13,36 @@ import { cn } from '@/lib/utils';
 interface SidebarProps {
   isOpen: boolean;
   onMenuItemClick?: () => void;
+  isAdmin?: boolean;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ isOpen, onMenuItemClick }) => {
-  const menuItems = [
+const Sidebar: React.FC<SidebarProps> = ({ isOpen, onMenuItemClick, isAdmin = false }) => {
+  // Debug para entender por que continua aparecendo mesmo para não-admin
+  useEffect(() => {
+    console.log('Sidebar - isAdmin recebido:', isAdmin);
+    
+    // Tentar identificar possíveis fatores que possam estar causando o problema
+    if (isAdmin) {
+      console.log('AVISO: Menu de configurações será mostrado');
+    } else {
+      console.log('INFO: Menu de configurações NÃO será mostrado');
+    }
+  }, [isAdmin]);
+
+  // Itens de menu que todos os usuários podem ver
+  const baseMenuItems = [
     { icon: Home, label: 'Dashboard', path: '/dashboard' },
     { icon: Calendar, label: 'Aulas', path: '/classes' },
     { icon: Users, label: 'Alunos', path: '/students' },
     { icon: ClipboardCheck, label: 'Presenças', path: '/attendance' },
     { icon: BarChart3, label: 'Relatórios', path: '/reports' },
-    { icon: Settings, label: 'Configurações', path: '/settings' },
   ];
+  
+  // Verificação estrita: só adiciona o item de configurações se isAdmin for exatamente true
+  // (não apenas truthy, mas exatamente igual a true)
+  const menuItems = isAdmin === true 
+    ? [...baseMenuItems, { icon: Settings, label: 'Configurações', path: '/settings' }]
+    : baseMenuItems;
 
   return (
     <div className={cn(

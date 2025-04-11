@@ -12,6 +12,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import { Class } from '@/lib/mockData';
 import { useAuth } from '@/hooks/useAuth';
+import { useAcademyRole } from '@/hooks/useAcademyRole';
 import { Database } from '@/integrations/supabase/types';
 
 // Esquema de validação
@@ -22,6 +23,7 @@ const formSchema = z.object({
   timeEnd: z.string().min(1, { message: 'Horário de término é obrigatório' }),
   level: z.enum(['beginner', 'intermediate', 'advanced', 'all']),
   instructor: z.string().min(3, { message: 'Nome do instrutor é obrigatório' }),
+  academyId: z.string().optional(),
 });
 
 type FormData = z.infer<typeof formSchema>;
@@ -30,7 +32,7 @@ interface ClassFormProps {
   open: boolean;
   onClose: () => void;
   onSuccess?: () => void;
-  classData?: Class; // Opcional para modo de edição
+  classData?: Class;
 }
 
 const weekDays = [
@@ -46,9 +48,11 @@ const weekDays = [
 const ClassForm: React.FC<ClassFormProps> = ({ open, onClose, onSuccess, classData }) => {
   const isEditMode = !!classData;
   const { user } = useAuth();
+  const { academyId, isAdmin } = useAcademyRole();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [academies, setAcademies] = useState<{id: string; name: string}[]>([]);
+  const [selectedAcademyId, setSelectedAcademyId] = useState<string | null>(null);
   
-  // Valores padrão para nova aula
   const defaultValues = {
     name: '',
     dayOfWeek: [],
@@ -56,6 +60,7 @@ const ClassForm: React.FC<ClassFormProps> = ({ open, onClose, onSuccess, classDa
     timeEnd: '',
     level: 'beginner' as const,
     instructor: '',
+    academyId: '',
   };
   
   const form = useForm<FormData>({
@@ -63,51 +68,89 @@ const ClassForm: React.FC<ClassFormProps> = ({ open, onClose, onSuccess, classDa
     defaultValues
   });
   
-  // Preencher o formulário com os dados da aula quando estiver em modo de edição
+  useEffect(() => {
+    const fetchAcademies = async () => {
+      if (isAdmin) {
+        try {
+          const { data, error } = await supabase
+            .from('academies')
+            .select('id, name')
+            .order('name');
+            
+          if (error) {
+            console.error('Erro ao buscar academias:', error);
+            return;
+          }
+          
+          if (data && data.length > 0) {
+            setAcademies(data);
+            
+            if (!selectedAcademyId && !isEditMode) {
+              setSelectedAcademyId(data[0].id);
+              form.setValue('academyId', data[0].id);
+            }
+          }
+        } catch (error) {
+          console.error('Erro ao buscar academias:', error);
+        }
+      }
+    };
+    
+    fetchAcademies();
+  }, [isAdmin, form, isEditMode, selectedAcademyId]);
+  
   useEffect(() => {
     if (classData) {
-      // Modo de edição: preencher com dados da aula
       form.reset({
         name: classData.name,
         dayOfWeek: classData.dayOfWeek,
         timeStart: classData.timeStart,
         timeEnd: classData.timeEnd,
         level: classData.level,
-        instructor: classData.instructor
+        instructor: classData.instructor,
+        academyId: classData.academyId || '',
       });
+      
+      if (classData.academyId) {
+        setSelectedAcademyId(classData.academyId);
+      }
     } else if (open) {
-      // Modo de criação: limpar formulário
-      form.reset(defaultValues);
+      const newDefaults = { ...defaultValues };
+      if (isAdmin && selectedAcademyId) {
+        newDefaults.academyId = selectedAcademyId;
+      }
+      form.reset(newDefaults);
     }
-  }, [classData, form, open]);
+  }, [classData, form, open, isAdmin, selectedAcademyId]);
   
   const onSubmit = async (data: FormData) => {
     try {
       setIsSubmitting(true);
       
-      // Verificar se o usuário é um administrador ou uma academia
-      const isAdmin = user?.role === 'admin';
-      let academyId = null;
-      
-      // Se não for admin, busca a academia vinculada ao usuário
-      if (!isAdmin && user?.id) {
-        const { data: academyData, error: academyError } = await supabase
-          .from('academies')
-          .select('id')
-          .eq('user_id', user.id)
-          .single();
-        
-        if (academyError) {
-          console.error('Erro ao buscar academia do usuário:', academyError);
-          if (academyError.code !== 'PGRST116') { // Não encontrado é aceitável
-            throw academyError;
-          }
-        } else {
-          academyId = academyData?.id;
-        }
+      if (!user?.id) {
+        throw new Error('Usuário não identificado. Por favor, faça login novamente.');
       }
       
-      // Converter os dias da semana para o tipo correto esperado pelo Supabase
+      let finalAcademyId: string | null = null;
+      
+      if (isAdmin) {
+        finalAcademyId = data.academyId || selectedAcademyId;
+        console.log('Admin está usando a academia selecionada:', finalAcademyId);
+      } else {
+        finalAcademyId = academyId;
+        console.log('Usuário normal usando sua academia vinculada:', finalAcademyId);
+      }
+      
+      if (!finalAcademyId) {
+        throw new Error('Nenhuma academia selecionada. Por favor, selecione uma academia válida.');
+      }
+      
+      console.log('Valores para cadastro de aula:', {
+        userId: user.id,
+        academyId: finalAcademyId,
+        isAdmin: isAdmin
+      });
+      
       const typedDayOfWeek = data.dayOfWeek as unknown as Database["public"]["Enums"]["weekday"][];
       
       const formattedClass = {
@@ -117,30 +160,36 @@ const ClassForm: React.FC<ClassFormProps> = ({ open, onClose, onSuccess, classDa
         time_start: data.timeStart,
         time_end: data.timeEnd,
         level: data.level,
-        user_id: user?.id,
-        academy_id: academyId,  // Adicionar academy_id
+        user_id: user.id,
+        academy_id: finalAcademyId,
       };
       
+      console.log('Salvando aula com dados:', formattedClass);
+      
       if (isEditMode) {
-        // Atualizar classe existente
         const { error } = await supabase
           .from('classes')
           .update(formattedClass)
           .eq('id', classData.id);
         
-        if (error) throw error;
+        if (error) {
+          console.error('Erro ao atualizar aula:', error);
+          throw error;
+        }
         
         toast({
           title: 'Aula atualizada',
           description: 'A aula foi atualizada com sucesso.',
         });
       } else {
-        // Criar nova classe
         const { error } = await supabase
           .from('classes')
           .insert(formattedClass);
         
-        if (error) throw error;
+        if (error) {
+          console.error('Erro ao inserir aula:', error);
+          throw error;
+        }
         
         toast({
           title: 'Aula criada',
@@ -148,10 +197,8 @@ const ClassForm: React.FC<ClassFormProps> = ({ open, onClose, onSuccess, classDa
         });
       }
       
-      // Resetar formulário
       form.reset(defaultValues);
       
-      // Fechar modal e atualizar lista
       if (onSuccess) onSuccess();
       onClose();
     } catch (error) {
@@ -159,7 +206,7 @@ const ClassForm: React.FC<ClassFormProps> = ({ open, onClose, onSuccess, classDa
       toast({
         variant: 'destructive',
         title: 'Erro ao salvar',
-        description: 'Ocorreu um erro ao salvar a aula. Tente novamente.',
+        description: `Ocorreu um erro ao salvar a aula: ${(error as any).message || 'Tente novamente.'}`,
       });
     } finally {
       setIsSubmitting(false);
@@ -167,16 +214,48 @@ const ClassForm: React.FC<ClassFormProps> = ({ open, onClose, onSuccess, classDa
   };
   
   return (
-    <Dialog open={open} onOpenChange={(isOpen) => {
-      if (!isOpen) onClose();
-    }}>
+    <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>{isEditMode ? 'Editar Aula' : 'Cadastrar Nova Aula'}</DialogTitle>
+          <DialogTitle>{isEditMode ? 'Editar Aula' : 'Nova Aula'}</DialogTitle>
         </DialogHeader>
         
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            {isAdmin && (
+              <FormField
+                control={form.control}
+                name="academyId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Academia</FormLabel>
+                    <Select
+                      onValueChange={(value) => {
+                        field.onChange(value);
+                        setSelectedAcademyId(value);
+                      }}
+                      defaultValue={field.value || selectedAcademyId || ''}
+                      value={field.value || selectedAcademyId || ''}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione uma academia" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {academies.map((academy) => (
+                          <SelectItem key={academy.id} value={academy.id}>
+                            {academy.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
+            
             <FormField
               control={form.control}
               name="name"
@@ -184,7 +263,21 @@ const ClassForm: React.FC<ClassFormProps> = ({ open, onClose, onSuccess, classDa
                 <FormItem>
                   <FormLabel>Nome da Aula</FormLabel>
                   <FormControl>
-                    <Input placeholder="Ex: Fundamentos, Avançado, etc." {...field} />
+                    <Input placeholder="Nome da aula" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            
+            <FormField
+              control={form.control}
+              name="instructor"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Instrutor</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Nome do instrutor" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -199,8 +292,8 @@ const ClassForm: React.FC<ClassFormProps> = ({ open, onClose, onSuccess, classDa
                   <FormLabel>Dias da Semana</FormLabel>
                   <FormControl>
                     <MultiSelect
-                      options={weekDays}
                       selected={field.value}
+                      options={weekDays}
                       onChange={field.onChange}
                       placeholder="Selecione os dias"
                     />
@@ -246,9 +339,10 @@ const ClassForm: React.FC<ClassFormProps> = ({ open, onClose, onSuccess, classDa
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Nível</FormLabel>
-                  <Select 
-                    onValueChange={field.onChange} 
+                  <Select
+                    onValueChange={field.onChange}
                     defaultValue={field.value}
+                    value={field.value}
                   >
                     <FormControl>
                       <SelectTrigger>
@@ -267,34 +361,16 @@ const ClassForm: React.FC<ClassFormProps> = ({ open, onClose, onSuccess, classDa
               )}
             />
             
-            <FormField
-              control={form.control}
-              name="instructor"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Instrutor</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Nome do instrutor" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            
             <DialogFooter>
-              <Button 
-                type="button" 
-                variant="outline" 
+              <Button
+                type="button"
+                variant="outline"
                 onClick={onClose}
                 disabled={isSubmitting}
               >
                 Cancelar
               </Button>
-              <Button 
-                type="submit"
-                disabled={isSubmitting}
-                className="bg-jiujitsu-500 hover:bg-jiujitsu-600"
-              >
+              <Button type="submit" disabled={isSubmitting}>
                 {isSubmitting ? 'Salvando...' : isEditMode ? 'Atualizar' : 'Salvar'}
               </Button>
             </DialogFooter>

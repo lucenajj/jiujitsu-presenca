@@ -28,6 +28,22 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   return isAuthenticated ? <>{children}</> : <Navigate to="/" replace />;
 };
 
+// Componente para rotas que requerem permissão de administrador
+const AdminRoute = ({ children }: { children: React.ReactNode }) => {
+  const { user } = useAuth();
+  
+  // Verificar se o usuário é admin (por role ou por email específico)
+  const isAdmin = user?.role === 'admin' || user?.email === 'lucenajj@gmail.com';
+  
+  console.log('AdminRoute - verificação:', { 
+    email: user?.email, 
+    role: user?.role, 
+    isAdmin 
+  });
+  
+  return isAdmin ? <>{children}</> : <Navigate to="/dashboard" replace />;
+};
+
 // Redirecionamento para usuários já autenticados
 const RedirectIfAuthenticated = ({ children }: { children: React.ReactNode }) => {
   const { isAuthenticated, isLoading } = useAuth();
@@ -58,7 +74,11 @@ const AppRoutes = () => (
       <Route path="/attendance" element={<AttendanceList />} />
       <Route path="/attendance/record/:classId" element={<AttendanceRecord />} />
       <Route path="/reports" element={<Reports />} />
-      <Route path="/settings" element={<Settings />} />
+      <Route path="/settings" element={
+        <AdminRoute>
+          <Settings />
+        </AdminRoute>
+      } />
     </Route>
     
     <Route path="*" element={<NotFound />} />

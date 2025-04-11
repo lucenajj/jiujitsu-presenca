@@ -49,7 +49,8 @@ const ClassesGrid: React.FC = () => {
         dayOfWeek: cls.day_of_week || [],
         timeStart: cls.time_start,
         timeEnd: cls.time_end,
-        level: cls.level
+        level: cls.level,
+        academyId: cls.academy_id
       }));
       
       setClasses(formattedClasses);

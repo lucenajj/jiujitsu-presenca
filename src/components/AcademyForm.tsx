@@ -166,6 +166,52 @@ const AcademyForm: React.FC<AcademyFormProps> = ({
           })
           .eq('id', academyId)
           .select();
+          
+        if (response.error) {
+          throw response.error;
+        }
+        
+        // Verificar/garantir que existe uma entrada na tabela user_academies
+        if (response.data && response.data.length > 0) {
+          const academyUserId = response.data[0].user_id;
+          
+          if (academyUserId) {
+            // Verificar se já existe uma entrada na tabela user_academies
+            const { data: existingUserAcademy, error: checkError } = await supabase
+              .from('user_academies')
+              .select('id')
+              .eq('user_id', academyUserId)
+              .eq('academy_id', academyId)
+              .maybeSingle();
+              
+            if (checkError) {
+              console.error('Erro ao verificar entrada existente na tabela user_academies:', checkError);
+            } else if (!existingUserAcademy) {
+              // Não existe entrada, criar uma
+              console.log('Criando entrada na tabela user_academies para o usuário da academia');
+              const { error: userAcademyError } = await supabase
+                .from('user_academies')
+                .insert({
+                  user_id: academyUserId,
+                  academy_id: academyId,
+                  role: 'academy_owner' // Definir o papel como academy_owner
+                });
+                
+              if (userAcademyError) {
+                console.error('Erro ao criar entrada na tabela user_academies:', userAcademyError);
+              } else {
+                console.log('Entrada na tabela user_academies criada com sucesso');
+              }
+            } else {
+              console.log('Entrada na tabela user_academies já existe, nenhuma ação necessária');
+            }
+          }
+        }
+        
+        toast({
+          title: "Academia atualizada com sucesso!",
+          description: "Os dados da academia foram atualizados.",
+        });
       } else {
         // Criação de nova academia
         
@@ -237,16 +283,54 @@ const AcademyForm: React.FC<AcademyFormProps> = ({
         
         console.log('Usuário de autenticação criado com sucesso:', authUserData);
         
-        // Inserir academia com o ID do usuário criado
-        console.log('Tentando inserir academia com user_id:', authUserData);
-        response = await supabase
+        // Inserir a academia no banco de dados
+        console.log('Inserindo academia no banco de dados com usuário associado:', authUserData);
+        const { data: responseData, error: academyError } = await supabase
           .from('academies')
           .insert({
             ...academyData,
-            user_id: authUserData, // ID retornado pela função create_user_auth
-            created_by: user.id
+            user_id: authUserData,      // ID do usuário que acabamos de criar
+            created_by: user.id,        // ID do usuário logado que está criando esta academia
+            created_at: new Date().toISOString()
           })
           .select();
+
+        if (academyError) {
+          throw academyError;
+        }
+
+        // Se a inserção for bem-sucedida e tiver retornado o registro da academia
+        if (responseData && responseData.length > 0) {
+          console.log('Academia criada com sucesso:', responseData[0]);
+          
+          // Obter o ID da academia criada
+          const newAcademyId = responseData[0].id;
+          
+          // Criar automaticamente a entrada na tabela user_academies
+          console.log('Criando entrada na tabela user_academies para o usuário da academia');
+          const { error: userAcademyError } = await supabase
+            .from('user_academies')
+            .insert({
+              user_id: authUserData,
+              academy_id: newAcademyId,
+              role: 'academy_owner' // Definir o papel como academy_owner
+            });
+            
+          if (userAcademyError) {
+            console.error('Erro ao criar entrada na tabela user_academies:', userAcademyError);
+            // Não falhar o processo inteiro se esta etapa falhar
+            // Apenas registrar o erro para resolver manualmente depois
+          } else {
+            console.log('Entrada na tabela user_academies criada com sucesso');
+          }
+        }
+        
+        toast({
+          title: "Academia cadastrada com sucesso!",
+          description: "A academia foi cadastrada e pode ser acessada pelo usuário criado.",
+        });
+        
+        response = { data: responseData, error: null };
       }
       
       const { data: responseData, error } = response;

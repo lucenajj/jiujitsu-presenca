@@ -24,6 +24,7 @@ export interface Class {
   timeEnd: string;
   level: 'all' | 'beginner' | 'intermediate' | 'advanced';
   instructor: string;
+  academyId?: string; // ID da academia associada à aula
 }
 
 export interface Attendance {

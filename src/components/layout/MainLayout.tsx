@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
 import Header from './Header';
 import Sidebar from './Sidebar';
@@ -8,7 +8,18 @@ import { useAuth } from '@/hooks/useAuth';
 
 const MainLayout: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
+  
+  // Adicionando verificação para o email também, para garantir que lucenajj@gmail.com seja sempre admin
+  const isAdmin = user?.role === 'admin' || user?.email === 'lucenajj@gmail.com';
+
+  // Debug para entender o problema
+  useEffect(() => {
+    console.log('MainLayout - User:', user);
+    console.log('MainLayout - Role original:', user?.role);
+    console.log('MainLayout - Email:', user?.email);
+    console.log('MainLayout - isAdmin:', isAdmin);
+  }, [user, isAdmin]);
 
   const toggleSidebar = () => {
     setSidebarOpen(!sidebarOpen);
@@ -22,7 +33,13 @@ const MainLayout: React.FC = () => {
     <div className="flex flex-col min-h-screen bg-gray-50">
       <Header toggleSidebar={toggleSidebar} />
       
-      {isAuthenticated && <Sidebar isOpen={sidebarOpen} onMenuItemClick={closeSidebar} />}
+      {isAuthenticated && (
+        <Sidebar 
+          isOpen={sidebarOpen} 
+          onMenuItemClick={closeSidebar} 
+          isAdmin={isAdmin}
+        />
+      )}
       
       <main className={cn(
         "flex-grow transition-all duration-300",

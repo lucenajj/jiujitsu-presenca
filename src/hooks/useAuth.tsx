@@ -33,26 +33,58 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     
     console.log('Dados da sessão:', session);
     
-    // Criar objeto de usuário base
+    // Criar objeto de usuário base - sempre começamos como 'user' regular
     const userObj: User = {
       id: session.user.id,
       email: session.user.email || '',
       name: session.user.email?.split('@')[0] || 'Usuário',
-      role: 'user', // Valor padrão que será substituído
+      role: 'user', // Valor padrão
     };
     
-    // Obter a role dos metadados do usuário - usar isso como fonte principal
-    // ao invés de tentar acessar a tabela user_academies que está causando recursão
-    if (session.user.user_metadata && session.user.user_metadata.role) {
-      userObj.role = session.user.user_metadata.role;
-    } else if (session.user.app_metadata && session.user.app_metadata.role) {
-      userObj.role = session.user.app_metadata.role;
+    console.log('Verificando papel do usuário:', session.user.id, 'Email:', session.user.email);
+    
+    // Vamos primeiro verificar se este é um dos usuários administradores conhecidos
+    if (session.user.email === 'lucenajj@gmail.com') {
+      console.log('Usuário reconhecido como ADMIN pelo email:', session.user.email);
+      userObj.role = 'admin';
+      return userObj;
     }
     
-    console.log('Role identificada:', userObj.role);
+    // Para todos os outros usuários, buscar o papel na base de dados
+    try {
+      // Buscar o papel do usuário na tabela user_academies
+      const { data: userData, error: userError } = await supabase
+        .from('user_academies')
+        .select('role, academy_id')
+        .eq('user_id', session.user.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(); // Usando maybeSingle em vez de single para evitar erro se não encontrar
+      
+      if (!userError && userData) {
+        console.log('Role encontrada na base:', userData.role);
+        userObj.role = userData.role;
+        userObj.academy_id = userData.academy_id;
+        console.log('Usuário identificado como:', userObj.role);
+        console.log('Academia vinculada:', userData.academy_id);
+      } else {
+        // Se não encontrar nada, mantém como 'user'
+        console.log('Nenhum papel encontrado na base, mantendo como user padrão');
+      }
+    } catch (error) {
+      console.error('Erro ao verificar papel do usuário:', error);
+      // Manterá o valor padrão 'user' em caso de erro
+    }
     
-    // Se não for admin, buscar a academia associada
-    if (userObj.role !== 'admin') {
+    // Verificação adicional para debug
+    if (userObj.role === 'admin') {
+      console.log('ATENÇÃO: Usuário definido como ADMIN:', userObj.email);
+    } else {
+      console.log('Usuário não é admin, role final:', userObj.role);
+    }
+    
+    // Se não for admin e ainda não tiver academy_id, buscar a academia associada
+    if (userObj.role !== 'admin' && !userObj.academy_id) {
       try {
         const { data: academyData, error: academyError } = await supabase
           .from('academies')

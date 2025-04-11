@@ -22,6 +22,7 @@ interface Class {
   time_end: string;
   level: string;
   instructor: string;
+  academyId?: string;
 }
 
 const Dashboard: React.FC = () => {
