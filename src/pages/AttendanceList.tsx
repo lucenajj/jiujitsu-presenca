@@ -9,6 +9,7 @@ import { Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/components/ui/use-toast';
 import { Student, Class } from '@/lib/mockData';
+import { useAuth } from '@/hooks/useAuth';
 
 interface Attendance {
   id: string;
@@ -24,6 +25,7 @@ const AttendanceList: React.FC = () => {
   const [students, setStudents] = useState<Record<string, Student>>({});
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
+  const { user } = useAuth();
 
   useEffect(() => {
     fetchData();
@@ -32,10 +34,36 @@ const AttendanceList: React.FC = () => {
   const fetchData = async () => {
     setIsLoading(true);
     try {
+      // Verificar se o usuário é um administrador ou uma academia
+      const isAdmin = user?.role === 'admin';
+      let academyId = null;
+      
+      // Se não for admin, busca a academia vinculada ao usuário
+      if (!isAdmin && user?.id) {
+        const { data: academyData, error: academyError } = await supabase
+          .from('academies')
+          .select('id')
+          .eq('user_id', user.id)
+          .single();
+        
+        if (academyError) {
+          console.error('Erro ao buscar academia do usuário:', academyError);
+          throw academyError;
+        }
+        
+        academyId = academyData?.id;
+        console.log('ID da academia do usuário atual:', academyId);
+      }
+      
       // Buscar todas as aulas e criar um mapa por ID para referência rápida
-      const { data: classesData, error: classesError } = await supabase
-        .from('classes')
-        .select('*');
+      let classesQuery = supabase.from('classes').select('*');
+      
+      // Se não for admin, filtrar aulas pelo user_id
+      if (!isAdmin && user?.id) {
+        classesQuery = classesQuery.eq('user_id', user.id);
+      }
+      
+      const { data: classesData, error: classesError } = await classesQuery;
       
       if (classesError) throw classesError;
       
@@ -55,9 +83,14 @@ const AttendanceList: React.FC = () => {
       setClasses(classesMap);
       
       // Buscar todos os alunos e criar um mapa por ID para referência rápida
-      const { data: studentsData, error: studentsError } = await supabase
-        .from('students')
-        .select('*');
+      let studentsQuery = supabase.from('students').select('*');
+      
+      // Se não for admin e tiver academyId, filtrar por academia
+      if (!isAdmin && academyId) {
+        studentsQuery = studentsQuery.eq('academy_id', academyId);
+      }
+      
+      const { data: studentsData, error: studentsError } = await studentsQuery;
       
       if (studentsError) throw studentsError;
       
@@ -81,10 +114,25 @@ const AttendanceList: React.FC = () => {
       setStudents(studentsMap);
       
       // Buscar todos os registros de presença
-      const { data: attendanceData, error: attendanceError } = await supabase
+      let attendanceQuery = supabase
         .from('attendance')
         .select('*')
         .order('date', { ascending: false });
+      
+      // Se não for admin e tiver classes filtradas, buscar apenas presenças dessas aulas
+      if (!isAdmin && classesData) {
+        const classIds = classesData.map(c => c.id);
+        if (classIds.length > 0) {
+          attendanceQuery = attendanceQuery.in('class_id', classIds);
+        } else {
+          // Se não houver classes, retornar lista vazia
+          setAttendanceRecords([]);
+          setIsLoading(false);
+          return;
+        }
+      }
+      
+      const { data: attendanceData, error: attendanceError } = await attendanceQuery;
       
       if (attendanceError) throw attendanceError;
       

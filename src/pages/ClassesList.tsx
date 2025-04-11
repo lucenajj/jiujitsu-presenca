@@ -3,17 +3,20 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Class } from '@/lib/mockData';
 import { Plus, Clock, Users, Award, Edit } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/components/ui/use-toast';
 import ClassForm from '@/components/ClassForm';
+import { useAuth } from '@/hooks/useAuth';
 
 const ClassesGrid: React.FC = () => {
   const [classes, setClasses] = useState<Class[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [selectedClass, setSelectedClass] = useState<Class | undefined>(undefined);
+  const [selectedClass, setSelectedClass] = useState<Class | null>(null);
+  const navigate = useNavigate();
   const { toast } = useToast();
+  const { user } = useAuth();
 
   useEffect(() => {
     fetchClasses();
@@ -22,31 +25,40 @@ const ClassesGrid: React.FC = () => {
   const fetchClasses = async () => {
     try {
       setIsLoading(true);
-      const { data, error } = await supabase
-        .from('classes')
-        .select('*')
-        .order('name', { ascending: true });
-
+      
+      // Verificar se o usuário é um administrador ou uma academia
+      const isAdmin = user?.role === 'admin';
+      
+      // Iniciar a consulta de aulas
+      let query = supabase.from('classes').select('*');
+      
+      // Se não for admin, filtrar por user_id
+      if (!isAdmin && user?.id) {
+        query = query.eq('user_id', user.id);
+      }
+      
+      const { data, error } = await query;
+      
       if (error) throw error;
-
-      // Transformar os dados para o formato esperado pelo componente
-      const formattedClasses = data.map(cls => ({
+      
+      // Mapear dados para o formato esperado
+      const formattedClasses = (data || []).map(cls => ({
         id: cls.id,
         name: cls.name,
-        dayOfWeek: cls.day_of_week,
+        instructor: cls.instructor,
+        dayOfWeek: cls.day_of_week || [],
         timeStart: cls.time_start,
         timeEnd: cls.time_end,
-        level: cls.level,
-        instructor: cls.instructor
+        level: cls.level
       }));
-
+      
       setClasses(formattedClasses);
     } catch (error) {
       console.error('Erro ao buscar aulas:', error);
       toast({
-        variant: 'destructive',
         title: 'Erro ao carregar aulas',
         description: 'Não foi possível buscar a lista de aulas.',
+        variant: 'destructive',
       });
     } finally {
       setIsLoading(false);
@@ -80,7 +92,7 @@ const ClassesGrid: React.FC = () => {
   };
 
   const openNewClassForm = () => {
-    setSelectedClass(undefined);
+    setSelectedClass(null);
     setIsFormOpen(true);
   };
 
@@ -91,7 +103,7 @@ const ClassesGrid: React.FC = () => {
 
   const closeForm = () => {
     setIsFormOpen(false);
-    setSelectedClass(undefined);
+    setSelectedClass(null);
   };
 
   return (

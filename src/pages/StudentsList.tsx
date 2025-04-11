@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Plus, Search, Edit } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
@@ -10,6 +10,7 @@ import StudentDetails from '@/components/StudentDetails';
 import { differenceInMonths } from 'date-fns';
 import { Progress } from '@/components/ui/progress';
 import { calculateBeltProgress } from '@/lib/utils';
+import { useAcademyRole } from '@/hooks/useAcademyRole';
 
 interface Student {
   id: string;
@@ -32,16 +33,37 @@ const StudentsList: React.FC = () => {
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   
+  // Usando o novo hook que centraliza a lógica de roles e academias
+  const { isAdmin, academyId, loading: roleLoading } = useAcademyRole();
+  
   const fetchStudents = async () => {
     try {
       setIsLoading(true);
-      const { data, error } = await supabase
-        .from('students')
-        .select('*')
-        .order('name', { ascending: true });
+      
+      // Construir query base
+      // Definir o tipo any temporariamente para evitar o erro de tipagem profunda
+      let query: any = supabase.from('students').select('*');
+      
+      // Aplicar filtro por academia para usuários não-admin
+      if (!isAdmin && academyId) {
+        // Usuário possui academia vinculada - mostrar apenas alunos desta academia
+        query = query.eq('academy_id', academyId);
+      } else if (!isAdmin) {
+        // Usuário não é admin e não tem academia vinculada - não mostrar nenhum aluno
+        setStudents([]);
+        setIsLoading(false);
+        return;
+      }
+      
+      // Ordenar por nome
+      query = query.order('name', { ascending: true });
+      
+      // Executar a consulta
+      const { data, error } = await query;
       
       if (error) throw error;
       
+      // Mapear os dados para o formato esperado pelo componente
       setStudents(data.map(student => ({
         id: student.id,
         name: student.name,
@@ -68,9 +90,12 @@ const StudentsList: React.FC = () => {
     }
   };
   
+  // Refatorado para buscar alunos apenas quando o carregamento do role estiver concluído
   useEffect(() => {
-    fetchStudents();
-  }, []);
+    if (!roleLoading) {
+      fetchStudents();
+    }
+  }, [roleLoading, academyId, isAdmin]);
   
   const filteredStudents = students.filter(student => 
     student.name.toLowerCase().includes(searchTerm.toLowerCase())
@@ -149,7 +174,7 @@ const StudentsList: React.FC = () => {
         />
       </div>
       
-      {isLoading ? (
+      {isLoading || roleLoading ? (
         <div className="flex justify-center py-10">
           <div className="animate-pulse text-jiujitsu-500">Carregando alunos...</div>
         </div>

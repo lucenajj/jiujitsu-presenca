@@ -5,6 +5,21 @@ Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/spec/v2.0.0.html).
 
+## [1.3.0] - 2025-04-10
+
+### Adicionado
+- Implementação de sistema multi-tenant usando a tabela `user_academies`
+- Utilização da coluna `role` na tabela `user_academies` para permissões de usuários
+- Políticas RLS atualizadas para utilizar a tabela `user_academies`
+- Hook de autenticação atualizado para buscar papéis na tabela `user_academies`
+- Adicionados novos scripts SQL para gerenciamento de permissões
+- Suporte para associação de usuários a múltiplas academias com diferentes papéis
+
+### Corrigido
+- Resolvido problema de permissões onde usuários admin não visualizavam todos os dados
+- Corrigido o erro "column user_metadata does not exist" nas políticas RLS
+- Implementado mecanismo mais robusto de verificação de papéis de usuários
+
 ## [1.2.2] - 2025-04-09
 
 ### Adicionado

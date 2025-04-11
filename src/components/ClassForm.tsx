@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -46,6 +46,7 @@ const weekDays = [
 const ClassForm: React.FC<ClassFormProps> = ({ open, onClose, onSuccess, classData }) => {
   const isEditMode = !!classData;
   const { user } = useAuth();
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
   // Valores padrão para nova aula
   const defaultValues = {
@@ -80,70 +81,88 @@ const ClassForm: React.FC<ClassFormProps> = ({ open, onClose, onSuccess, classDa
     }
   }, [classData, form, open]);
   
-  const isSubmitting = form.formState.isSubmitting;
-  
   const onSubmit = async (data: FormData) => {
     try {
-      if (isEditMode && classData) {
-        // Atualizando a aula existente no Supabase
+      setIsSubmitting(true);
+      
+      // Verificar se o usuário é um administrador ou uma academia
+      const isAdmin = user?.role === 'admin';
+      let academyId = null;
+      
+      // Se não for admin, busca a academia vinculada ao usuário
+      if (!isAdmin && user?.id) {
+        const { data: academyData, error: academyError } = await supabase
+          .from('academies')
+          .select('id')
+          .eq('user_id', user.id)
+          .single();
+        
+        if (academyError) {
+          console.error('Erro ao buscar academia do usuário:', academyError);
+          if (academyError.code !== 'PGRST116') { // Não encontrado é aceitável
+            throw academyError;
+          }
+        } else {
+          academyId = academyData?.id;
+        }
+      }
+      
+      // Converter os dias da semana para o tipo correto esperado pelo Supabase
+      const typedDayOfWeek = data.dayOfWeek as unknown as Database["public"]["Enums"]["weekday"][];
+      
+      const formattedClass = {
+        name: data.name,
+        instructor: data.instructor,
+        day_of_week: typedDayOfWeek,
+        time_start: data.timeStart,
+        time_end: data.timeEnd,
+        level: data.level,
+        user_id: user?.id,
+        academy_id: academyId,  // Adicionar academy_id
+      };
+      
+      if (isEditMode) {
+        // Atualizar classe existente
         const { error } = await supabase
           .from('classes')
-          .update({
-            name: data.name,
-            day_of_week: data.dayOfWeek as unknown as Database["public"]["Enums"]["weekday"][],
-            time_start: data.timeStart,
-            time_end: data.timeEnd,
-            level: data.level,
-            instructor: data.instructor
-          })
+          .update(formattedClass)
           .eq('id', classData.id);
         
         if (error) throw error;
         
         toast({
-          title: 'Aula atualizada com sucesso!',
-          variant: 'default',
+          title: 'Aula atualizada',
+          description: 'A aula foi atualizada com sucesso.',
         });
       } else {
-        // Inserindo a nova aula no Supabase
+        // Criar nova classe
         const { error } = await supabase
           .from('classes')
-          .insert({
-            name: data.name,
-            day_of_week: data.dayOfWeek as unknown as Database["public"]["Enums"]["weekday"][],
-            time_start: data.timeStart,
-            time_end: data.timeEnd,
-            level: data.level,
-            instructor: data.instructor,
-            user_id: user?.id
-          });
+          .insert(formattedClass);
         
-        if (error) {
-          console.error('Erro detalhado:', error);
-          throw error;
-        }
+        if (error) throw error;
         
         toast({
-          title: 'Aula cadastrada com sucesso!',
-          variant: 'default',
+          title: 'Aula criada',
+          description: 'A aula foi criada com sucesso.',
         });
       }
       
-      form.reset();
+      // Resetar formulário
+      form.reset(defaultValues);
       
-      // Chamar onSuccess antes de fechar o modal para garantir que os dados sejam recarregados
-      if (onSuccess) {
-        await onSuccess();
-      }
-      
+      // Fechar modal e atualizar lista
+      if (onSuccess) onSuccess();
       onClose();
     } catch (error) {
-      console.error(`Erro ao ${isEditMode ? 'atualizar' : 'cadastrar'} aula:`, error);
+      console.error('Erro ao salvar aula:', error);
       toast({
-        title: `Erro ao ${isEditMode ? 'atualizar' : 'cadastrar'} aula`,
-        description: (error as any).message || 'Por favor, tente novamente mais tarde.',
         variant: 'destructive',
+        title: 'Erro ao salvar',
+        description: 'Ocorreu um erro ao salvar a aula. Tente novamente.',
       });
+    } finally {
+      setIsSubmitting(false);
     }
   };
   

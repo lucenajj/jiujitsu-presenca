@@ -55,11 +55,39 @@ const Dashboard: React.FC = () => {
     try {
       console.log('Iniciando busca de dados para o Dashboard...');
       
+      // Verificar se o usuário é um administrador ou uma academia
+      const isAdmin = user?.role === 'admin';
+      let academyId = null;
+      
+      // Se não for admin, busca a academia vinculada ao usuário
+      if (!isAdmin) {
+        const { data: academyData, error: academyError } = await supabase
+          .from('academies')
+          .select('id')
+          .eq('user_id', user?.id)
+          .single();
+        
+        if (academyError) {
+          console.error('Erro ao buscar academia do usuário:', academyError);
+          throw academyError;
+        }
+        
+        academyId = academyData?.id;
+        console.log('ID da academia do usuário atual:', academyId);
+      }
+      
       // Buscar contagem de alunos ativos
-      const { data: studentsData, error: studentsError } = await supabase
+      let studentsQuery = supabase
         .from('students')
         .select('id, belt')
         .eq('status', 'active');
+      
+      // Se não for admin e tiver um academyId, filtra por academia
+      if (!isAdmin && academyId) {
+        studentsQuery = studentsQuery.eq('academy_id', academyId);
+      }
+      
+      const { data: studentsData, error: studentsError } = await studentsQuery;
       
       if (studentsError) {
         console.error('Erro ao buscar alunos:', studentsError);
@@ -78,8 +106,8 @@ const Dashboard: React.FC = () => {
       console.log('Buscando aulas do Supabase com user_id:', user?.id);
       let classesQuery = supabase.from('classes').select('*');
       
-      // Se tivermos user_id, filtre por ele
-      if (user?.id) {
+      // Se tivermos user_id e não for admin, filtre por ele
+      if (user?.id && !isAdmin) {
         classesQuery = classesQuery.eq('user_id', user.id);
       }
       
@@ -94,10 +122,20 @@ const Dashboard: React.FC = () => {
       // Buscar presenças dos últimos 30 dias
       const thirtyDaysAgo = format(subDays(new Date(), 30), 'yyyy-MM-dd');
       
-      const { data: attendanceData, error: attendanceError } = await supabase
+      let attendanceQuery = supabase
         .from('attendance')
-        .select('id, student_ids')
+        .select('id, student_ids, class_id')
         .gte('date', thirtyDaysAgo);
+      
+      // Se não for admin e tiver classes filtradas, busca presenças apenas dessas aulas
+      if (!isAdmin && classesData) {
+        const classIds = classesData.map(c => c.id);
+        if (classIds.length > 0) {
+          attendanceQuery = attendanceQuery.in('class_id', classIds);
+        }
+      }
+      
+      const { data: attendanceData, error: attendanceError } = await attendanceQuery;
       
       if (attendanceError) {
         console.error('Erro ao buscar presenças:', attendanceError);
@@ -257,10 +295,36 @@ const Dashboard: React.FC = () => {
         try {
           console.log('RecentAttendanceList: Buscando registros de presença');
           
+          // Verificar se o usuário é um administrador ou uma academia
+          const isAdmin = user?.role === 'admin';
+          let academyId = null;
+          
+          // Se não for admin, busca a academia vinculada ao usuário
+          if (!isAdmin) {
+            const { data: academyData, error: academyError } = await supabase
+              .from('academies')
+              .select('id')
+              .eq('user_id', user.id)
+              .single();
+            
+            if (academyError) {
+              console.error('Erro ao buscar academia do usuário:', academyError);
+              return;
+            }
+            
+            academyId = academyData?.id;
+            console.log('ID da academia do usuário atual:', academyId);
+          }
+          
           // Buscar classes primeiro para referência
-          const { data: classesData, error: classesError } = await supabase
-            .from('classes')
-            .select('*');
+          let classesQuery = supabase.from('classes').select('*');
+          
+          // Se não for admin, filtrar por user_id
+          if (!isAdmin) {
+            classesQuery = classesQuery.eq('user_id', user.id);
+          }
+            
+          const { data: classesData, error: classesError } = await classesQuery;
             
           if (classesError) {
             console.error('RecentAttendanceList: Erro ao buscar classes:', classesError);
@@ -275,9 +339,14 @@ const Dashboard: React.FC = () => {
           setClassesMap(classesMapData);
           
           // Buscar alunos para referência
-          const { data: studentsData, error: studentsError } = await supabase
-            .from('students')
-            .select('*');
+          let studentsQuery = supabase.from('students').select('*');
+          
+          // Se não for admin e tiver academyId, filtrar por academia
+          if (!isAdmin && academyId) {
+            studentsQuery = studentsQuery.eq('academy_id', academyId);
+          }
+            
+          const { data: studentsData, error: studentsError } = await studentsQuery;
             
           if (studentsError) {
             console.error('RecentAttendanceList: Erro ao buscar alunos:', studentsError);
@@ -291,29 +360,43 @@ const Dashboard: React.FC = () => {
           });
           setStudentsMap(studentsMapData);
           
-          // Buscar registros de presença recentes
-          const { data: attendanceData, error: attendanceError } = await supabase
+          // Buscar registros de presença
+          let attendanceQuery = supabase
             .from('attendance')
             .select('*')
             .order('date', { ascending: false })
             .limit(5);
-            
+          
+          // Se não for admin e tiver classes filtradas, buscar apenas essas presenças
+          if (!isAdmin && classesData) {
+            const classIds = classesData.map(c => c.id);
+            if (classIds.length > 0) {
+              attendanceQuery = attendanceQuery.in('class_id', classIds);
+            } else {
+              // Se não houver classes, retornar lista vazia
+              setRecentAttendance([]);
+              setLoading(false);
+              return;
+            }
+          }
+          
+          const { data: attendanceData, error: attendanceError } = await attendanceQuery;
+          
           if (attendanceError) {
             console.error('RecentAttendanceList: Erro ao buscar presenças:', attendanceError);
             return;
           }
           
-          console.log('RecentAttendanceList: Presenças encontradas:', attendanceData);
           setRecentAttendance(attendanceData || []);
-        } catch (e) {
-          console.error('RecentAttendanceList: Exceção:', e);
+        } catch (error) {
+          console.error('RecentAttendanceList: Erro ao buscar dados:', error);
         } finally {
           setLoading(false);
         }
       }
       
       fetchRecentAttendance();
-    }, [user?.id]);
+    }, [user?.id, user?.role]);
     
     // Função para formatar data
     const formatDate = (dateString: string) => {

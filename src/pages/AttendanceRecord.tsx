@@ -181,6 +181,9 @@ const AttendanceRecord: React.FC = () => {
     try {
       console.log('Iniciando registro de presença para a data:', isoDate);
       
+      // Obter o academy_id do usuário logado
+      const academyId = user.academy_id;
+      
       // Verificar se já existe registro para atualizar ou criar novo
       const { data: existingAttendance, error: checkError } = await supabase
         .from('attendance')
@@ -215,7 +218,8 @@ const AttendanceRecord: React.FC = () => {
           .from('attendance')
           .update({
             student_ids: attendanceList,
-            created_by: user.id
+            created_by: user.id,
+            academy_id: academyId
           })
           .eq('id', existingAttendance.id);
       } else {
@@ -226,7 +230,8 @@ const AttendanceRecord: React.FC = () => {
             class_id: classInfo.id,
             date: isoDate,
             student_ids: attendanceList,
-            created_by: user.id
+            created_by: user.id,
+            academy_id: academyId
           });
       }
       

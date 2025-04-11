@@ -8,6 +8,7 @@ interface User {
   email: string;
   name?: string;
   role?: string;
+  academy_id?: string;
 }
 
 interface AuthContextType {
@@ -27,32 +28,64 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const { toast } = useToast();
 
   // Função para criar um objeto de usuário a partir da sessão
-  const createUserObject = (session: any): User => {
+  const createUserObject = async (session: any): Promise<User> => {
     if (!session?.user) return null as unknown as User;
     
     console.log('Dados da sessão:', session);
-    console.log('User metadata:', session.user.user_metadata);
     
-    // Obtendo o papel/role do usuário a partir dos metadados
-    let userRole = 'user'; // Valor padrão
-    
-    if (session.user.user_metadata && session.user.user_metadata.role) {
-      userRole = session.user.user_metadata.role;
-    }
-    
-    // Verificar também no raw_user_meta_data caso seja necessário
-    if (session.user.app_metadata && session.user.app_metadata.role) {
-      userRole = session.user.app_metadata.role;
-    }
-    
-    console.log('Role identificada:', userRole);
-    
-    return {
+    // Criar objeto de usuário base
+    const userObj: User = {
       id: session.user.id,
       email: session.user.email || '',
       name: session.user.email?.split('@')[0] || 'Usuário',
-      role: userRole,
+      role: 'user', // Valor padrão que será substituído
     };
+    
+    // Buscar o papel do usuário na tabela user_academies
+    try {
+      const { data, error } = await supabase
+        .from('user_academies')
+        .select('role')
+        .eq('user_id', session.user.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+      
+      if (!error && data) {
+        userObj.role = data.role;
+        console.log('Role identificada na tabela user_academies:', data.role);
+      } else {
+        // Fallback: tentar obter a role dos metadados do usuário
+        if (session.user.user_metadata && session.user.user_metadata.role) {
+          userObj.role = session.user.user_metadata.role;
+        } else if (session.user.app_metadata && session.user.app_metadata.role) {
+          userObj.role = session.user.app_metadata.role;
+        }
+        console.log('Role identificada:', userObj.role);
+      }
+    } catch (error) {
+      console.error('Erro na verificação:', error);
+    }
+    
+    // Se não for admin, buscar a academia associada
+    if (userObj.role !== 'admin') {
+      try {
+        const { data: academyData, error: academyError } = await supabase
+          .from('academies')
+          .select('id')
+          .eq('user_id', session.user.id)
+          .single();
+        
+        if (!academyError && academyData?.id) {
+          userObj.academy_id = academyData.id;
+          console.log('Academia vinculada ao usuário:', academyData.id);
+        }
+      } catch (error) {
+        console.error('Erro ao buscar academia do usuário:', error);
+      }
+    }
+    
+    return userObj;
   };
 
   // Verificar se o usuário já está autenticado através da sessão do Supabase
@@ -69,7 +102,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
         
         if (session) {
-          const userObject = createUserObject(session);
+          const userObject = await createUserObject(session);
           setUser(userObject);
         }
       } catch (error) {
@@ -83,10 +116,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     
     // Configurar o listener de mudanças de autenticação
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
+      async (event, session) => {
         if (session) {
           // Usuário logado
-          const userObject = createUserObject(session);
+          const userObject = await createUserObject(session);
           setUser(userObject);
         } else {
           // Usuário deslogado
@@ -126,20 +159,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (data.user) {
         console.log('Login bem-sucedido:', data.user);
         
-        // Atualizar os metadados do usuário para incluir a role (para testes)
-        try {
-          const { error: updateError } = await supabase.auth.updateUser({
-            data: { role: 'admin' }
-          });
-          
-          if (updateError) {
-            console.error('Erro ao atualizar metadados do usuário:', updateError);
-          } else {
-            console.log('Metadados do usuário atualizados com sucesso');
-          }
-        } catch (updateError) {
-          console.error('Exceção ao atualizar metadados:', updateError);
-        }
+        // Criar objeto de usuário com todas as informações
+        const userObject = await createUserObject(data);
+        setUser(userObject);
         
         toast({
           title: 'Login realizado com sucesso',

@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -16,6 +16,7 @@ import { cn, getClassesRequiredForNextBelt, BELT_PROGRESSION } from '@/lib/utils
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import { Student } from '@/lib/mockData';
+import { useAcademyRole } from '@/hooks/useAcademyRole';
 
 // Definindo o schema de validação
 const formSchema = z.object({
@@ -43,13 +44,18 @@ interface StudentFormProps {
 }
 
 const StudentForm: React.FC<StudentFormProps> = ({ open, onClose, onSuccess, student }) => {
+  const [isLoading, setIsLoading] = useState(false);
   const isEditMode = !!student;
+  
+  // Usando o hook centralizado de academyRole
+  const { isAdmin, academyId } = useAcademyRole();
   
   console.log('[StudentForm] Rendering with props:', { 
     open, 
     isEditMode, 
     studentId: student?.id,
-    studentName: student?.name
+    studentName: student?.name,
+    academyId
   });
   
   // Valores padrão para novo aluno
@@ -108,6 +114,11 @@ const StudentForm: React.FC<StudentFormProps> = ({ open, onClose, onSuccess, stu
         ? format(data.last_promotion_date, 'yyyy-MM-dd')
         : format(new Date(), 'yyyy-MM-dd');
       
+      // Verificar se o academyId está disponível
+      if (!isAdmin && !academyId) {
+        throw new Error('Usuário não possui academia vinculada. Contate um administrador.');
+      }
+      
       if (isEditMode && student) {
         // Atualizando o aluno existente no Supabase
         const updateData = {
@@ -120,7 +131,9 @@ const StudentForm: React.FC<StudentFormProps> = ({ open, onClose, onSuccess, stu
           registration_date: formattedRegistrationDate,
           classes_per_week: data.classes_per_week,
           classes_attended: data.classes_attended,
-          last_promotion_date: formattedPromotionDate
+          last_promotion_date: formattedPromotionDate,
+          // Manter o mesmo academyId para admins, ou usar o academyId do usuário atual
+          academy_id: isAdmin ? student.academy_id : academyId
         };
         
         const { error } = await supabase
@@ -146,7 +159,8 @@ const StudentForm: React.FC<StudentFormProps> = ({ open, onClose, onSuccess, stu
           registration_date: formattedRegistrationDate,
           classes_per_week: data.classes_per_week,
           classes_attended: data.classes_attended,
-          last_promotion_date: formattedPromotionDate
+          last_promotion_date: formattedPromotionDate,
+          academy_id: academyId  // Usar o academyId do hook
         };
         
         const { error } = await supabase
