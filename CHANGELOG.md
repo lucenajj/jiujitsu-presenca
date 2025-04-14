@@ -5,7 +5,7 @@ Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/spec/v2.0.0.html).
 
-## [1.3.2] - 2025-04-14
+## [1.3.2] - 2025-04-12
 
 ### 🔒 Segurança
 - Testada nova política de acesso para a tabela `user_academies` para aprimorar a visualização por parte de administradores e proprietários de academias
