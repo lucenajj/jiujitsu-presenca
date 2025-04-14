@@ -104,12 +104,15 @@ const Dashboard: React.FC = () => {
       console.log('Distribuição por faixas:', beltDistribution);
       
       // Buscar aulas
-      console.log('Buscando aulas do Supabase com user_id:', user?.id);
+      console.log('Buscando aulas do Supabase com academy_id:', academyId);
       let classesQuery = supabase.from('classes').select('*');
       
-      // Se tivermos user_id e não for admin, filtre por ele
-      if (user?.id && !isAdmin) {
-        classesQuery = classesQuery.eq('user_id', user.id);
+      // Se tivermos academy_id e não for admin, filtre por academy_id
+      if (academyId && !isAdmin) {
+        console.log('Aplicando filtro de academy_id para classes:', academyId);
+        classesQuery = classesQuery.eq('academy_id', academyId);
+      } else {
+        console.log('Não aplicando filtro de academy_id. Admin:', isAdmin, 'academyId:', academyId);
       }
       
       const { data: classesData, error: classesError } = await classesQuery;
@@ -118,7 +121,7 @@ const Dashboard: React.FC = () => {
         console.error('Erro ao buscar aulas:', classesError);
         throw classesError;
       }
-      console.log('Aulas encontradas do Supabase:', classesData);
+      console.log('TODAS as aulas no banco:', classesData);
       
       // Buscar presenças dos últimos 30 dias
       const thirtyDaysAgo = format(subDays(new Date(), 30), 'yyyy-MM-dd');
@@ -229,11 +232,41 @@ const Dashboard: React.FC = () => {
         if (!user?.id) return;
         
         try {
-          console.log('RealClassesList: Buscando aulas com user_id:', user.id);
-          const { data, error } = await supabase
-            .from('classes')
-            .select('*')
-            .eq('user_id', user.id);
+          console.log('RealClassesList: Buscando aulas para o usuário:', user.id);
+          
+          // Verificar se o usuário é admin
+          const isAdmin = user.role === 'admin';
+          let academyId = null;
+          
+          // Se não for admin, busca a academia vinculada ao usuário
+          if (!isAdmin) {
+            const { data: academyData, error: academyError } = await supabase
+              .from('academies')
+              .select('id')
+              .eq('user_id', user.id)
+              .single();
+            
+            if (academyError) {
+              console.error('RealClassesList: Erro ao buscar academia do usuário:', academyError);
+              setLoading(false);
+              return;
+            }
+            
+            academyId = academyData?.id;
+            console.log('RealClassesList: ID da academia do usuário:', academyId);
+          }
+          
+          // Buscar aulas filtradas pelo academy_id
+          let query = supabase.from('classes').select('*');
+          
+          if (!isAdmin && academyId) {
+            console.log('RealClassesList: Aplicando filtro de academy_id:', academyId);
+            query = query.eq('academy_id', academyId);
+          } else {
+            console.log('RealClassesList: Não aplicando filtro. Admin:', isAdmin, 'academyId:', academyId);
+          }
+            
+          const { data, error } = await query;
             
           if (error) {
             console.error('RealClassesList: Erro ao buscar aulas:', error);
@@ -310,6 +343,7 @@ const Dashboard: React.FC = () => {
             
             if (academyError) {
               console.error('Erro ao buscar academia do usuário:', academyError);
+              setLoading(false);
               return;
             }
             
@@ -320,15 +354,19 @@ const Dashboard: React.FC = () => {
           // Buscar classes primeiro para referência
           let classesQuery = supabase.from('classes').select('*');
           
-          // Se não for admin, filtrar por user_id
-          if (!isAdmin) {
-            classesQuery = classesQuery.eq('user_id', user.id);
+          // Se não for admin, filtrar por academy_id
+          if (!isAdmin && academyId) {
+            console.log('RecentAttendanceList: Aplicando filtro de academy_id para classes:', academyId);
+            classesQuery = classesQuery.eq('academy_id', academyId);
+          } else {
+            console.log('RecentAttendanceList: Não aplicando filtro de classes. Admin:', isAdmin, 'academyId:', academyId);
           }
             
           const { data: classesData, error: classesError } = await classesQuery;
             
           if (classesError) {
             console.error('RecentAttendanceList: Erro ao buscar classes:', classesError);
+            setLoading(false);
             return;
           }
           
@@ -351,6 +389,7 @@ const Dashboard: React.FC = () => {
             
           if (studentsError) {
             console.error('RecentAttendanceList: Erro ao buscar alunos:', studentsError);
+            setLoading(false);
             return;
           }
           
@@ -368,8 +407,12 @@ const Dashboard: React.FC = () => {
             .order('date', { ascending: false })
             .limit(5);
           
+          // Se não for admin e tiver academy_id, filtrar por academia
+          if (!isAdmin && academyId) {
+            attendanceQuery = attendanceQuery.eq('academy_id', academyId);
+          }
           // Se não for admin e tiver classes filtradas, buscar apenas essas presenças
-          if (!isAdmin && classesData) {
+          else if (!isAdmin && classesData) {
             const classIds = classesData.map(c => c.id);
             if (classIds.length > 0) {
               attendanceQuery = attendanceQuery.in('class_id', classIds);
@@ -385,28 +428,25 @@ const Dashboard: React.FC = () => {
           
           if (attendanceError) {
             console.error('RecentAttendanceList: Erro ao buscar presenças:', attendanceError);
+            setLoading(false);
             return;
           }
           
+          console.log('RecentAttendanceList: Presenças encontradas:', attendanceData);
           setRecentAttendance(attendanceData || []);
-        } catch (error) {
-          console.error('RecentAttendanceList: Erro ao buscar dados:', error);
+        } catch (e) {
+          console.error('RecentAttendanceList: Exceção ao buscar dados:', e);
         } finally {
           setLoading(false);
         }
       }
       
       fetchRecentAttendance();
-    }, [user?.id, user?.role]);
+    }, [user?.id]);
     
-    // Função para formatar data
-    const formatDate = (dateString: string) => {
-      const options: Intl.DateTimeFormatOptions = { 
-        day: '2-digit', 
-        month: '2-digit', 
-        year: 'numeric' 
-      };
-      return new Date(dateString).toLocaleDateString('pt-BR', options);
+    const formatDate = (dateStr: string) => {
+      const date = new Date(dateStr);
+      return format(date, 'dd/MM/yyyy');
     };
     
     if (loading) {
@@ -464,131 +504,136 @@ const Dashboard: React.FC = () => {
     );
   };
 
-  if (isLoading) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <div className="text-jiujitsu-500">Carregando dados do dashboard...</div>
-      </div>
-    );
-  }
-
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold text-jiujitsu-700">Dashboard</h1>
-        <div className="text-right">
-          <p className="text-sm text-gray-500">Bem-vindo(a),</p>
-          <p className="font-medium text-lg">{user?.name}</p>
+    <div className="space-y-8">
+      <h1 className="text-3xl font-bold text-jiujitsu-700">Dashboard</h1>
+
+      {isLoading ? (
+        <div className="flex justify-center py-12">
+          <div className="animate-pulse text-jiujitsu-500">Carregando dados...</div>
         </div>
-      </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium">Alunos Ativos</CardTitle>
+                <Users className="h-4 w-4 text-jiujitsu-500" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{stats.activeStudents}</div>
+                <p className="text-xs text-muted-foreground">
+                  Total de alunos matriculados
+                </p>
+              </CardContent>
+            </Card>
+            
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium">Aulas</CardTitle>
+                <Calendar className="h-4 w-4 text-jiujitsu-500" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{stats.classCount}</div>
+                <p className="text-xs text-muted-foreground">
+                  Turmas disponíveis
+                </p>
+              </CardContent>
+            </Card>
+            
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium">Presenças</CardTitle>
+                <ClipboardCheck className="h-4 w-4 text-jiujitsu-500" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{stats.totalAttendances}</div>
+                <p className="text-xs text-muted-foreground">
+                  Nos últimos 30 dias
+                </p>
+              </CardContent>
+            </Card>
+            
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium">Média por Aula</CardTitle>
+                <Award className="h-4 w-4 text-jiujitsu-500" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{stats.averageStudentsPerClass}</div>
+                <p className="text-xs text-muted-foreground">
+                  Alunos por aula
+                </p>
+              </CardContent>
+            </Card>
+          </div>
 
-      {/* Cards de estatísticas */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Alunos Ativos</CardTitle>
-            <Users className="h-4 w-4 text-jiujitsu-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.activeStudents}</div>
-            <p className="text-xs text-muted-foreground">
-              Total de alunos matriculados
-            </p>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Aulas</CardTitle>
-            <Calendar className="h-4 w-4 text-jiujitsu-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.classCount}</div>
-            <p className="text-xs text-muted-foreground">
-              Turmas disponíveis
-            </p>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Presenças</CardTitle>
-            <ClipboardCheck className="h-4 w-4 text-jiujitsu-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.totalAttendances}</div>
-            <p className="text-xs text-muted-foreground">
-              Nos últimos 30 dias
-            </p>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Média por Aula</CardTitle>
-            <Award className="h-4 w-4 text-jiujitsu-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.averageStudentsPerClass}</div>
-            <p className="text-xs text-muted-foreground">
-              Alunos por aula
-            </p>
-          </CardContent>
-        </Card>
-      </div>
+          {/* Aulas recentes e próximas */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Últimas Presenças Registradas</CardTitle>
+                <CardDescription>Registros de presença mais recentes</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <RecentAttendanceList />
+              </CardContent>
+            </Card>
+            
+            <Card>
+              <CardHeader>
+                <CardTitle>Aulas</CardTitle>
+                <CardDescription>Suas aulas cadastradas</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <RealClassesList />
+              </CardContent>
+            </Card>
+          </div>
 
-      {/* Aulas recentes e próximas */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Últimas Presenças Registradas</CardTitle>
-            <CardDescription>Registros de presença mais recentes</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <RecentAttendanceList />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Distribuição por Faixas</CardTitle>
-            <CardDescription>Alunos ativos por nível de graduação</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {['white', 'blue', 'purple', 'brown', 'black'].map((belt) => {
-                const count = stats.beltDistribution[belt] || 0;
-                const percentage = stats.activeStudents > 0 
-                  ? (count / stats.activeStudents) * 100 
-                  : 0;
-                
-                return (
-                  <div key={belt} className="space-y-2">
-                    <div className="flex justify-between">
-                      <div className="flex items-center">
-                        <div className={`w-4 h-4 rounded-full mr-2 ${getBeltColor(belt)}`}></div>
-                        <span className="capitalize">
-                          {belt === 'white' ? 'Branca' : 
-                           belt === 'blue' ? 'Azul' : 
-                           belt === 'purple' ? 'Roxa' : 
-                           belt === 'brown' ? 'Marrom' : 'Preta'}
-                        </span>
+          {/* Distribuição por faixas */}
+          <div className="grid grid-cols-1 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Distribuição por Faixas</CardTitle>
+                <CardDescription>Alunos ativos por nível de graduação</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {Object.entries(stats.beltDistribution).map(([belt, count]) => {
+                    const percentage = stats.activeStudents > 0
+                      ? Math.round((count / stats.activeStudents) * 100)
+                      : 0;
+                    
+                    return (
+                      <div key={belt} className="space-y-1">
+                        <div className="flex justify-between">
+                          <div className="flex items-center">
+                            <div className={`w-4 h-4 rounded-full mr-2 ${getBeltColor(belt)}`}></div>
+                            <span className="capitalize">
+                              {belt === 'white' ? 'Branca' : 
+                               belt === 'blue' ? 'Azul' : 
+                               belt === 'purple' ? 'Roxa' : 
+                               belt === 'brown' ? 'Marrom' : 'Preta'}
+                            </span>
+                          </div>
+                          <span>{count} alunos</span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div
+                            className={`${getBeltColor(belt)} h-2 rounded-full`}
+                            style={{ width: `${percentage}%` }}
+                          />
+                        </div>
                       </div>
-                      <span>{count} alunos</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div
-                        className={`${getBeltColor(belt)} h-2 rounded-full`}
-                        style={{ width: `${percentage}%` }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </>
+      )}
     </div>
   );
 };

@@ -58,14 +58,18 @@ const AttendanceList: React.FC = () => {
       // Buscar todas as aulas e criar um mapa por ID para referência rápida
       let classesQuery = supabase.from('classes').select('*');
       
-      // Se não for admin, filtrar aulas pelo user_id
-      if (!isAdmin && user?.id) {
-        classesQuery = classesQuery.eq('user_id', user.id);
+      // Se não for admin e tiver academy_id, filtrar por academia
+      if (!isAdmin && academyId) {
+        console.log('AttendanceList: Filtrando classes por academy_id:', academyId);
+        classesQuery = classesQuery.eq('academy_id', academyId);
+      } else {
+        console.log('AttendanceList: Sem filtro de classes por academy_id. Admin:', isAdmin, 'AcademyId:', academyId);
       }
       
       const { data: classesData, error: classesError } = await classesQuery;
       
       if (classesError) throw classesError;
+      console.log('AttendanceList: Total de classes encontradas:', classesData?.length || 0);
       
       const classesMap: Record<string, Class> = {};
       classesData.forEach((cls) => {
@@ -87,12 +91,16 @@ const AttendanceList: React.FC = () => {
       
       // Se não for admin e tiver academyId, filtrar por academia
       if (!isAdmin && academyId) {
+        console.log('AttendanceList: Filtrando alunos por academy_id:', academyId);
         studentsQuery = studentsQuery.eq('academy_id', academyId);
+      } else {
+        console.log('AttendanceList: Sem filtro de alunos por academy_id. Admin:', isAdmin, 'AcademyId:', academyId);
       }
       
       const { data: studentsData, error: studentsError } = await studentsQuery;
       
       if (studentsError) throw studentsError;
+      console.log('AttendanceList: Total de alunos encontrados:', studentsData?.length || 0);
       
       const studentsMap: Record<string, Student> = {};
       studentsData.forEach((student) => {

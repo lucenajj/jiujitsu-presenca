@@ -80,6 +80,7 @@ export type Database = {
           date: string
           id: string
           student_ids: string[]
+          academy_id: string | null
         }
         Insert: {
           class_id: string
@@ -88,6 +89,7 @@ export type Database = {
           date: string
           id?: string
           student_ids: string[]
+          academy_id?: string | null
         }
         Update: {
           class_id?: string
@@ -96,6 +98,7 @@ export type Database = {
           date?: string
           id?: string
           student_ids?: string[]
+          academy_id?: string | null
         }
         Relationships: [
           {
@@ -119,6 +122,7 @@ export type Database = {
           time_start: string
           updated_at: string | null
           user_id: string | null
+          academy_id: string | null
         }
         Insert: {
           created_at?: string | null
@@ -131,6 +135,7 @@ export type Database = {
           time_start: string
           updated_at?: string | null
           user_id?: string | null
+          academy_id?: string | null
         }
         Update: {
           created_at?: string | null
@@ -143,6 +148,7 @@ export type Database = {
           time_start?: string
           updated_at?: string | null
           user_id?: string | null
+          academy_id?: string | null
         }
         Relationships: []
       }
@@ -161,6 +167,7 @@ export type Database = {
           classes_per_week: number
           classes_attended: number
           last_promotion_date: string
+          academy_id: string | null
         }
         Insert: {
           belt?: Database["public"]["Enums"]["belt_level"]
@@ -176,6 +183,7 @@ export type Database = {
           classes_per_week?: number
           classes_attended?: number
           last_promotion_date?: string
+          academy_id?: string | null
         }
         Update: {
           belt?: Database["public"]["Enums"]["belt_level"]
@@ -191,6 +199,7 @@ export type Database = {
           classes_per_week?: number
           classes_attended?: number
           last_promotion_date?: string
+          academy_id?: string | null
         }
         Relationships: []
       }

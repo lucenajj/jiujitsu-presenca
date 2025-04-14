@@ -28,18 +28,41 @@ const ClassesGrid: React.FC = () => {
       
       // Verificar se o usuário é um administrador ou uma academia
       const isAdmin = user?.role === 'admin';
+      let academyId = null;
+      
+      // Se não for admin, busca a academia vinculada ao usuário
+      if (!isAdmin && user?.id) {
+        const { data: academyData, error: academyError } = await supabase
+          .from('academies')
+          .select('id')
+          .eq('user_id', user.id)
+          .single();
+        
+        if (academyError) {
+          console.error('Erro ao buscar academia do usuário:', academyError);
+          throw academyError;
+        }
+        
+        academyId = academyData?.id;
+        console.log('ID da academia do usuário atual:', academyId);
+      }
       
       // Iniciar a consulta de aulas
       let query = supabase.from('classes').select('*');
       
-      // Se não for admin, filtrar por user_id
-      if (!isAdmin && user?.id) {
-        query = query.eq('user_id', user.id);
+      // Se não for admin e tiver academyId, filtrar por academia
+      if (!isAdmin && academyId) {
+        console.log('ClassesList: Filtrando classes por academy_id:', academyId);
+        query = query.eq('academy_id', academyId);
+      } else {
+        console.log('ClassesList: Sem filtro por academy_id. Admin:', isAdmin, 'AcademyId:', academyId);
       }
       
       const { data, error } = await query;
       
       if (error) throw error;
+      
+      console.log('ClassesList: Total de classes encontradas:', data?.length || 0);
       
       // Mapear dados para o formato esperado
       const formattedClasses = (data || []).map(cls => ({
